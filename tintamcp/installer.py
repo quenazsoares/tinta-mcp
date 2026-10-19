@@ -139,8 +139,8 @@ def run_installer(auto_yes: bool = False) -> None:
     shutil.copy2(ext_assets / "tinta_mcp.py", ext_dir / "tinta_mcp.py")
     shutil.copy2(ext_assets / "tinta_mcp.inx", ext_dir / "tinta_mcp.inx")
 
-    ops_src = ext_assets / "ops"
-    ops_dst = ext_dir / "ops"
+    ops_src = ext_assets / "tinta_mcp_ops"
+    ops_dst = ext_dir / "tinta_mcp_ops"
     if ops_dst.exists():
         shutil.rmtree(ops_dst, ignore_errors=True)
     shutil.copytree(ops_src, ops_dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -188,15 +188,6 @@ def run_installer(auto_yes: bool = False) -> None:
     print()
     print("Add this entry to your MCP client configuration (Claude Desktop, Cursor, etc.):")
     print()
-    print("""{
-  "mcpServers": {
-    "tinta": {
-      "command": "tinta"
-    }
-  }
-}""")
-    print()
-    print("If running on demand with uvx, use:")
     print("""{
   "mcpServers": {
     "tinta": {
