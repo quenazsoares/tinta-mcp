@@ -1,0 +1,4 @@
+# Ubuntu 26.04 is a hosted image not yet included in actionlint's built-in labels.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

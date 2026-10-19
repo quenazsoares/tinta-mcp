@@ -64,7 +64,9 @@ Run this on the branch you intend to release, normally `main`. The push starts t
 
 Wheel and sdist are built once. The workflow verifies the release archives, checks package metadata, and tests installation from the wheel. The verified distributions and their SHA-256 hashes are saved as a workflow artifact for 30 days.
 
-After uploading to TestPyPI, the workflow downloads both published files and compares their hashes with the original build. It tests the downloaded wheel on Windows and Linux with Python 3.12 and 3.13. Dependencies come from the normal PyPI index. Extension and skill installation use temporary directories, leaving the user's Inkscape profile untouched.
+After uploading to TestPyPI, the workflow downloads both published files and compares their hashes with the original build. It tests the downloaded wheel on Windows and Ubuntu 26.04 with Python 3.12 and 3.13. Dependencies come from the normal PyPI index. Extension and skill installation use temporary directories, leaving the user's Inkscape profile untouched.
+
+Each validation job adds a table to the workflow's Summary page with the package version, runner image, Python version, and outcomes of the hash and installation checks. The summary also runs after a failure and reports failed or skipped checks. Detailed output remains in the job logs; no separate report download is needed.
 
 Candidates stop after TestPyPI validation. If a candidate needs a fix, prepare the next candidate, such as `0.2.2rc2`.
 
