@@ -30,6 +30,10 @@ permissions:
   pull-requests: read
   contents: read
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
 jobs:
   pr-title:
     name: Validate PR Title (Conventional Commits)
@@ -74,10 +78,10 @@ jobs:
         run: uv sync --all-groups
 
       - name: Check code formatting (ruff format)
-        run: uv run ruff format --check extension tintamcp tests
+        run: uv run ruff format --check extension tintamcp scripts tests
 
       - name: Check lints and imports (ruff check)
-        run: uv run ruff check extension tintamcp tests
+        run: uv run ruff check extension tintamcp scripts tests
 
       - name: Check static types (pyright)
         run: uv run pyright

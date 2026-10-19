@@ -17,30 +17,34 @@ on:
           - "pypi"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
 
 jobs:
   verify:
     name: Quality, security, and Linux integration
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      testpypi: ${{ steps.release.outputs.testpypi }}
+      pypi: ${{ steps.release.outputs.pypi }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate tag matches package version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          python - <<'PY'
-          import os
-          import tomllib
-          from pathlib import Path
-
-          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          expected_tag = f"v{version}"
-          actual_tag = os.environ["GITHUB_REF_NAME"]
-          if actual_tag != expected_tag:
-              raise SystemExit(f"Tag {actual_tag!r} does not match package version {expected_tag!r}")
-          PY
+      - name: Validate version, tag, and publication target
+        id: release
+        env:
+          PUBLISH_TARGET: ${{ inputs.publish_target || 'none' }}
+        run: python scripts/release.py info
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
@@ -51,13 +55,13 @@ jobs:
         run: uv python install 3.13
 
       - name: Sync dependencies
-        run: uv sync --all-groups
+        run: uv sync --locked --all-groups
 
       - name: Check code formatting
-        run: uv run ruff format --check extension tintamcp tests
+        run: uv run ruff format --check extension tintamcp scripts tests
 
       - name: Check lint and imports
-        run: uv run ruff check extension tintamcp tests
+        run: uv run ruff check extension tintamcp scripts tests
 
       - name: Check static types
         run: uv run pyright
@@ -99,7 +103,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Sync dependencies
-        run: uv sync --all-groups --python ${{ matrix.python-version }}
+        run: uv sync --locked --all-groups --python ${{ matrix.python-version }}
 
       - name: Validate Windows installer syntax
         shell: pwsh
@@ -119,6 +123,8 @@ jobs:
     name: Build release artifacts
     needs: [verify, windows-tests]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -170,6 +176,29 @@ jobs:
       - name: Verify release artifacts
         run: uv run python scripts/verify_release_artifacts.py
 
+      - name: Validate package metadata and README
+        run: uvx twine check dist/*
+
+      - name: Test the installed wheel outside the source package
+        run: |
+          wheel=$(find dist -name '*.whl' -print -quit)
+          uv tool run --from "$wheel" tinta-mcp --help
+          uv run --no-project --with "$wheel" python -I scripts/smoke_installed_package.py
+
+      - name: Record distribution hashes
+        run: sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS
+
+      - name: Save verified distributions for publication
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish GitHub Release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -177,7 +206,7 @@ jobs:
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
           files: |
             tinta-bundle.zip
             tinta-extension.zip
@@ -186,34 +215,96 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-pypi:
-    name: Publish to PyPI / TestPyPI
+  publish-testpypi:
+    name: Publish verified distributions to TestPyPI
     needs: [verify, build-and-release]
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target != 'none'
+    if: needs.verify.outputs.testpypi == 'true'
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/tinta-mcp/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Download verified distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+
+      - name: Check distribution hashes
+        run: sha256sum -c SHA256SUMS
+
+      - name: Publish to TestPyPI
+        run: uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/ --check-url https://test.pypi.org/simple/ dist/*
+
+  validate-testpypi:
+    name: Validate TestPyPI (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    needs: [verify, publish-testpypi]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+
+      - name: Download original distributions
+        uses: actions/download-artifact@v4
         with:
-          enable-cache: true
+          name: python-distributions
 
       - name: Set up Python
-        run: uv python install 3.13
+        run: uv python install ${{ matrix.python-version }}
 
-      - name: Build Python packages
-        run: uv build
-
-      - name: Publish to TestPyPI
-        if: github.event.inputs.publish_target == 'testpypi'
+      - name: Download the published files and verify their hashes
+        shell: bash
         env:
-          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        run: uv publish --publish-url https://test.pypi.org/legacy/
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: |
+          sha256sum -c SHA256SUMS
+          uv run --no-project --python "$PYTHON_VERSION" python scripts/release.py download "$RELEASE_VERSION"
+
+      - name: Test the package downloaded from TestPyPI
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: |
+          wheel=$(find testpypi-dist -name '*.whl' -print -quit)
+          uv tool run --python "$PYTHON_VERSION" --from "$wheel" tinta-mcp --help
+          uv run --no-project --python "$PYTHON_VERSION" --with "$wheel" python -I scripts/smoke_installed_package.py
+
+  publish-pypi:
+    name: Promote tested distributions to PyPI
+    needs: [verify, validate-testpypi]
+    if: needs.verify.outputs.pypi == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/tinta-mcp/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Download verified distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+
+      - name: Check distribution hashes
+        run: sha256sum -c SHA256SUMS
 
       - name: Publish to Production PyPI
-        if: github.event.inputs.publish_target == 'pypi'
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: uv publish
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/*
