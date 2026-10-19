@@ -24,7 +24,7 @@ SERVER_FILES = {
     "main.py",
     "server.py",
 }
-SKILL_FILES = {"tinta-designer/SKILL.md"}
+SKILL_FILES = {"SKILL.md"}
 
 
 def require(condition: bool, message: str) -> None:
