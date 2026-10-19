@@ -1,15 +1,12 @@
 # Tinta
 
-**INKSCAPE × AI × MCP**
-
-> Give your AI a vector editor.\
-> A Model Context Protocol server for Inkscape.
+![Tinta — Inkscape × AI × MCP. Give your AI a vector editor.](https://raw.githubusercontent.com/quenazsoares/tinta-mcp/main/assets/tinta-mcp-banner.png)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![FastMCP 4.0](https://img.shields.io/badge/FastMCP-4.0-green.svg)](https://github.com/jlowin/fastmcp)
 
-Tinta (*ink* in Portuguese) connects AI assistants to an open Inkscape session over D-Bus. Assistants such as Claude, Cursor, and Antigravity can inspect the document tree, create shapes and paths, resize the canvas, and capture previews from Inkscape.
+Tinta (*ink* in Portuguese) connects AI assistants to an open Inkscape session through MCP. Its structured tools create and edit SVG elements, inspect documents, and export previews using Inkscape.
 
 ## How it works
 
