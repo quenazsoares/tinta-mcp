@@ -137,38 +137,11 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
-      - name: Create Extension Zip
-        run: |
-          mkdir -p package
-          cp extension/tinta_mcp.inx package/
-          cp extension/tinta_mcp.py package/
-          cp -r extension/tinta_mcp_ops package/
-          find package/ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-
-          cd package
-          zip -r ../tinta-extension.zip .
-          cd ..
-
       - name: Create Skill Zip
         run: |
           cd .agents/skills
           zip -r ../../tinta-designer-skill.zip tinta-designer
           cd ../..
-
-      - name: Create All-in-One Bundle Zip
-        run: |
-          mkdir -p bundle/tinta/scripts bundle/tinta/.agents/skills
-          cp install_windows.bat bundle/tinta/
-          cp scripts/install_windows.bat scripts/install_windows.ps1 scripts/install_linux.sh bundle/tinta/scripts/
-          cp -r extension bundle/tinta/
-          cp -r tintamcp bundle/tinta/
-          cp -r .agents/skills/tinta-designer bundle/tinta/.agents/skills/
-          cp pyproject.toml uv.lock README.md LICENSE bundle/tinta/
-          find bundle/ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-
-          cd bundle
-          zip -r ../tinta-bundle.zip tinta
-          cd ..
 
       - name: Build Python packages (wheel & sdist)
         run: uv build
@@ -177,7 +150,7 @@ jobs:
         run: uv run python scripts/verify_release_artifacts.py
 
       - name: Validate package metadata and README
-        run: uvx twine check dist/*
+        run: uvx twine check dist/*.whl dist/*.tar.gz
 
       - name: Test the installed wheel outside the source package
         run: |
@@ -205,13 +178,21 @@ jobs:
         with:
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
+          body: |
+            ${{ needs.verify.outputs.prerelease == 'true' && 'This candidate is available on TestPyPI. You can also use the attached wheel with uvx.' || 'Install from PyPI with `uvx tinta-mcp install`.' }}
+
+            - The wheel includes the MCP server, Inkscape extension, and designer skill.
+            - For manual skill installation, extract `tinta-designer-skill.zip` into your agent's skills directory.
+            - For development, use the source code archives linked below.
+
+            See the [README](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/README.md) for installation and client configuration.
           draft: false
           prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
+          fail_on_unmatched_files: true
           files: |
-            tinta-bundle.zip
-            tinta-extension.zip
             tinta-designer-skill.zip
-            dist/*
+            dist/*.whl
+            dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -241,7 +222,7 @@ jobs:
         run: sha256sum -c SHA256SUMS
 
       - name: Publish to TestPyPI
-        run: uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/ --check-url https://test.pypi.org/simple/ dist/*
+        run: uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/ --check-url https://test.pypi.org/simple/ dist/*.whl dist/*.tar.gz
 
   validate-testpypi:
     name: Validate TestPyPI (${{ matrix.os }}, Python ${{ matrix.python-version }})
@@ -335,4 +316,4 @@ jobs:
         run: sha256sum -c SHA256SUMS
 
       - name: Publish to Production PyPI
-        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/*
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/*.whl dist/*.tar.gz

@@ -62,7 +62,11 @@ Run this on the branch you intend to release, normally `main`. The push starts t
 
 ## Test and promote
 
-Wheel and sdist are built once. The workflow verifies the release archives, checks package metadata, and tests installation from the wheel. The verified distributions and their SHA-256 hashes are saved as a workflow artifact for 30 days.
+Wheel and sdist are built once. The workflow verifies the skill ZIP and bundled package assets, checks package metadata, and tests installation from the wheel. The verified distributions and their SHA-256 hashes are saved as a workflow artifact for 30 days.
+
+GitHub Releases attach three files: the wheel, the source distribution (`.tar.gz`), and `tinta-designer-skill.zip` for manual skill installation. The Python package includes the server, extension, and skill, so separate extension and all-in-one ZIPs are not generated. GitHub also provides source code ZIP and tar.gz links for the tagged repository.
+
+The release notes point users to uvx for installation, the skill ZIP for manual setup, and the source archives for development. Final versions are installed from PyPI; candidates are available on TestPyPI or through the attached wheel. Uploads explicitly select `.whl` and `.tar.gz` files so build metadata such as `dist/.gitignore` is excluded.
 
 After uploading to TestPyPI, the workflow downloads both published files and compares their hashes with the original build. It tests the downloaded wheel on Windows and Ubuntu 26.04 with Python 3.12 and 3.13. Dependencies come from the normal PyPI index. Extension and skill installation use temporary directories, leaving the user's Inkscape profile untouched.
 
