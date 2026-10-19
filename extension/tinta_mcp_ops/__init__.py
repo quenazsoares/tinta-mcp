@@ -1,0 +1,1 @@
+# Inkscape MCP operations module

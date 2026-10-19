@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "assets/**"
+      - ".gitignore"
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "assets/**"
+      - ".gitignore"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  pr-title:
+    name: Validate PR Title (Conventional Commits)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Validate PR Title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+
+  lint:
+    name: Lint, Format & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Check code formatting (ruff format)
+        run: uv run ruff format --check extension tintamcp tests
+
+      - name: Check lints and imports (ruff check)
+        run: uv run ruff check extension tintamcp tests
+
+      - name: Check static types (pyright)
+        run: uv run pyright
+
+      - name: Validate Linux installer syntax
+        run: bash -n scripts/install_linux.sh
+
+  audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Audit dependencies for known CVEs
+        run: uv run pip-audit
+
+  test:
+    name: Test (${{ matrix.os }}, Py ${{ matrix.python-version }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Sync dependencies
+        run: uv sync --all-groups --python ${{ matrix.python-version }}
+
+      - name: Validate Windows installer syntax
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/install_windows.ps1), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Run test suite with coverage
+        run: uv run pytest
+
+      - name: Upload coverage artifact
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7
+
+  dbus-e2e:
+    name: Headless D-Bus E2E Test (Linux)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Inkscape and headless test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y inkscape libglib2.0-bin xvfb dbus-x11
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Run live tests in isolated profiles and documents
+        run: timeout 15m xvfb-run -a dbus-run-session uv run pytest tests/test_dbus_smoke.py --live-inkscape -v --junitxml=live-inkscape-results.xml
+
+      - name: Upload live test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-inkscape-results
+          path: live-inkscape-results.xml
+          if-no-files-found: ignore
+          retention-days: 7

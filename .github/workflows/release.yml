@@ -1,0 +1,219 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "Publish to PyPI repository"
+        required: true
+        default: "none"
+        type: choice
+        options:
+          - "none"
+          - "testpypi"
+          - "pypi"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Quality, security, and Linux integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          expected_tag = f"v{version}"
+          actual_tag = os.environ["GITHUB_REF_NAME"]
+          if actual_tag != expected_tag:
+              raise SystemExit(f"Tag {actual_tag!r} does not match package version {expected_tag!r}")
+          PY
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Check code formatting
+        run: uv run ruff format --check extension tintamcp tests
+
+      - name: Check lint and imports
+        run: uv run ruff check extension tintamcp tests
+
+      - name: Check static types
+        run: uv run pyright
+
+      - name: Audit dependencies
+        run: uv run pip-audit
+
+      - name: Validate Linux installer syntax
+        run: bash -n scripts/install_linux.sh
+
+      - name: Install Inkscape and headless test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y inkscape libglib2.0-bin xvfb dbus-x11
+
+      - name: Run test suite
+        run: uv run pytest
+
+      - name: Run live Inkscape tests in isolated profiles and documents
+        run: timeout 15m xvfb-run -a dbus-run-session uv run pytest tests/test_dbus_smoke.py --live-inkscape -v
+
+  windows-tests:
+    name: Windows tests and installer validation (Py ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Sync dependencies
+        run: uv sync --all-groups --python ${{ matrix.python-version }}
+
+      - name: Validate Windows installer syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/install_windows.ps1), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Run test suite
+        run: uv run pytest
+
+  build-and-release:
+    name: Build release artifacts
+    needs: [verify, windows-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Create Extension Zip
+        run: |
+          mkdir -p package
+          cp extension/tinta_mcp.inx package/
+          cp extension/tinta_mcp.py package/
+          cp -r extension/tinta_mcp_ops package/
+          find package/ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
+          cd package
+          zip -r ../tinta-extension.zip .
+          cd ..
+
+      - name: Create Skill Zip
+        run: |
+          cd .agents/skills
+          zip -r ../../tinta-designer-skill.zip tinta-designer
+          cd ../..
+
+      - name: Create All-in-One Bundle Zip
+        run: |
+          mkdir -p bundle/tinta/scripts bundle/tinta/.agents/skills
+          cp install_windows.bat bundle/tinta/
+          cp scripts/install_windows.bat scripts/install_windows.ps1 scripts/install_linux.sh bundle/tinta/scripts/
+          cp -r extension bundle/tinta/
+          cp -r tintamcp bundle/tinta/
+          cp -r .agents/skills/tinta-designer bundle/tinta/.agents/skills/
+          cp pyproject.toml uv.lock README.md LICENSE bundle/tinta/
+          find bundle/ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
+          cd bundle
+          zip -r ../tinta-bundle.zip tinta
+          cd ..
+
+      - name: Build Python packages (wheel & sdist)
+        run: uv build
+
+      - name: Verify release artifacts
+        run: uv run python scripts/verify_release_artifacts.py
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            tinta-bundle.zip
+            tinta-extension.zip
+            tinta-designer-skill.zip
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI / TestPyPI
+    needs: [verify, build-and-release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target != 'none'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Build Python packages
+        run: uv build
+
+      - name: Publish to TestPyPI
+        if: github.event.inputs.publish_target == 'testpypi'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: uv publish --publish-url https://test.pypi.org/legacy/
+
+      - name: Publish to Production PyPI
+        if: github.event.inputs.publish_target == 'pypi'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish

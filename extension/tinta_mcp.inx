@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Tinta MCP</name>
+  <id>org.tinta.mcp</id>
+
+  <effect>
+    <object-type>all</object-type>
+    <effects-menu hidden="true" />
+  </effect>
+
+  <script>
+    <command location="inx" interpreter="python">tinta_mcp.py</command>
+  </script>
+</inkscape-extension>
