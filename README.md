@@ -8,6 +8,63 @@
 
 Tinta (*ink* in Portuguese) connects AI assistants to an open Inkscape session through MCP. Its structured tools create and edit SVG elements, inspect documents, and export previews using Inkscape.
 
+## Requirements
+
+- Inkscape 1.2 or newer
+- Python 3.12 or newer (uv can download a compatible interpreter automatically)
+- [uv](https://docs.astral.sh/uv/)
+
+On Windows, Tinta uses the `gdbus.exe` bundled with Inkscape. On Linux, `inkscape` and `gdbus` must be on PATH, with Inkscape and Tinta using the same user session bus. When using WSL, run both in the Linux environment; these instructions do not cover connecting a WSL server to Windows Inkscape.
+
+## Installation
+
+Install the Inkscape extension from the PyPI package:
+
+```bash
+uvx tinta-mcp install
+```
+
+The installer copies the extension to your Inkscape user extensions directory and prints the MCP client configuration. It also offers to install the AI assistant skill in any supported agent directories it detects. Add `--yes` to accept all detected skill installations without prompts.
+
+Restart Inkscape after installation and open a document, then configure your MCP client below. You do not need to clone the repository or create a virtual environment.
+
+## Client configuration
+
+Add this entry to your client's MCP configuration, such as `claude_desktop_config.json` or `mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "tinta": {
+      "command": "uvx",
+      "args": ["tinta-mcp"]
+    }
+  }
+}
+```
+
+The client runs `uvx tinta-mcp` to start the server. The `install` subcommand is only needed to set up or update the extension. Make sure `uvx` is on the client's PATH.
+
+Tinta provides structured SVG operations. It does not run arbitrary Python or textual commands, and the `--enable-python` argument is no longer accepted. Remove it from older client configurations.
+
+### AI assistant skill
+
+The installer checks for Claude, Cursor, and Gemini/Antigravity skill directories and asks before copying `tinta-designer` into them. The skill provides workflows for batch element creation, non-destructive canvas edits, and visual verification.
+
+For manual installation or other agents, download `tinta-designer-skill.zip` from the [latest release](https://github.com/quenazsoares/tinta-mcp/releases/latest) and extract the `tinta-designer` directory into your agent's skills folder.
+
+## Updating
+
+To fetch the latest published version and update the Inkscape extension, run:
+
+```bash
+uvx tinta-mcp@latest install
+```
+
+Restart Inkscape afterward. Set the client's `args` to `["tinta-mcp@latest"]` and restart its MCP server to use the latest server version too. Without `@latest`, uvx can reuse a cached version.
+
+To keep the server and extension on a specific release, use the same `tinta-mcp@X.Y.Z` version in the install command and client configuration, replacing `X.Y.Z` with the release number. Updating the server alone does not update the files already copied into Inkscape.
+
 ## How it works
 
 Inkscape exposes internal actions over D-Bus. When Tinta triggers an action, Inkscape runs the extension in its own process. The extension can then read and update the document DOM.
@@ -15,68 +72,6 @@ Inkscape exposes internal actions over D-Bus. When Tinta triggers an action, Ink
 The server and extension exchange requests through a private IPC directory for the current user. The server writes one versioned request, triggers `org.tinta.mcp` with `gdbus`, and accepts a response only when its session and request IDs match. The extension serializes the staged SVG before writing that response. If activation times out or no response arrives, Tinta reports that the outcome is unknown and leaves the request pending. It will not reuse the shared request slot until the pending request is resolved.
 
 On Windows, Tinta uses the `gdbus.exe` bundled with Inkscape and does not require a separate D-Bus daemon. On Linux, it uses the user session bus.
-
-## Requirements
-
-- Inkscape 1.2 or newer
-- Python 3.12 or newer
-- [uv](https://docs.astral.sh/uv/)
-
-## Installation
-
-### Windows
-
-Run the installer batch script:
-
-```cmd
-install_windows.bat
-```
-
-Or run the PowerShell script directly:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install_windows.ps1
-```
-
-The installer locates Inkscape and copies the extension and its `tinta_mcp_ops` package to the user extensions directory. It then runs `uv sync` and prints the MCP client configuration. If `preferences.xml` does not exist yet, launch and close Inkscape, then run the installer again to suppress the first-run welcome dialog.
-
-### Linux and WSL
-
-Run the Linux installer script from the repository root:
-
-```bash
-bash scripts/install_linux.sh
-```
-
-The installer checks for `inkscape` and `gdbus`, then copies the extension and its `tinta_mcp_ops` package to `~/.config/inkscape/extensions`. It runs `uv sync` and writes `mcp_config.snippet.json` with the project directory filled in.
-
-## Client configuration
-
-Both installers print a configuration block and save it to `mcp_config.snippet.json` in the project root. Copy the entry into your client configuration file, such as `claude_desktop_config.json` or `mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "tinta": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/absolute/path/to/tinta",
-        "run",
-        "tinta"
-      ]
-    }
-  }
-}
-```
-
-Tinta provides structured SVG operations. It does not run arbitrary Python or textual commands, and the `--enable-python` argument is no longer accepted.
-
-When upgrading from 0.2.1, update both the server and extension, then restart Inkscape. Editing the source checkout does not update an installed extension. Remove `--enable-python` from the client configuration.
-
-### AI assistant skill
-
-For AI environments that support skills (such as Claude Code, Cursor, or Antigravity), download `tinta-designer-skill.zip` from the latest release and extract the `tinta-designer` directory into your agent's skills folder. The skill equips assistants with workflows for batch element creation, non-destructive canvas edits, and visual verification.
 
 ## Available tools
 
@@ -118,6 +113,18 @@ SVG tags and attributes are treated as data. Fixed extension handlers make docum
 
 ## Development
 
+Clone the repository and install the development dependencies:
+
+```bash
+git clone https://github.com/quenazsoares/tinta-mcp.git
+cd tinta-mcp
+uv sync --all-groups
+```
+
+To install the extension from the checkout, run `install_windows.bat` on Windows or `bash scripts/install_linux.sh` on Linux. These scripts also set up the local environment and save `mcp_config.snippet.json` in the project root. The Windows PowerShell script can also be run directly with `powershell -ExecutionPolicy Bypass -File scripts/install_windows.ps1`.
+
+Run the local server with `uv run tinta`. For MCP clients, use `"command": "uv"` and `"args": ["--directory", "/absolute/path/to/tinta-mcp", "run", "tinta"]`, replacing the path with your checkout directory. After changing extension code, run the installer again and restart Inkscape.
+
 Run the test suite:
 
 ```bash
@@ -138,6 +145,8 @@ Check formatting, lints, and types:
 uv run ruff check extension tintamcp tests
 uv run pyright
 ```
+
+For version preparation, TestPyPI validation, and PyPI publication, see the [release guide](https://github.com/quenazsoares/tinta-mcp/blob/main/docs/releasing.md).
 
 ## Acknowledgements and lineage
 
