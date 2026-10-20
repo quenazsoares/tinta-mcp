@@ -24,10 +24,9 @@ if any(argument.split("=", 1)[0] == "--enable-python" for argument in sys.argv[1
     sys.exit(2)
 
 if len(sys.argv) > 1 and sys.argv[1] == "install":
-    from tintamcp.installer import run_installer
+    from tintamcp.installer import install_from_args
 
-    auto_yes = "--yes" in sys.argv or "-y" in sys.argv
-    run_installer(auto_yes=auto_yes)
+    install_from_args(sys.argv[2:])
     sys.exit(0)
 
 from tintamcp.server import main

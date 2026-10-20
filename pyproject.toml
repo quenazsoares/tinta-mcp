@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=4.0.0",
+    "tomlkit>=0.15.2",
 ]
 
 [project.scripts]
