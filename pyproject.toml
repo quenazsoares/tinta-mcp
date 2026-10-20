@@ -1,6 +1,6 @@
 [project]
 name = "tinta-mcp"
-version = "0.2.3rc1"
+version = "0.2.3rc2"
 description = "Tinta: Give your AI a vector editor (Model Context Protocol server for Inkscape)"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -1853,7 +1853,7 @@ wheels = [
 
 [[package]]
 name = "tinta-mcp"
-version = "0.2.3rc1"
+version = "0.2.3rc2"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
