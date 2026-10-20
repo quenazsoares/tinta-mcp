@@ -134,6 +134,9 @@ def test_edit_after_backup_is_detected_and_backup_location_reported(tmp_path, mo
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows security descriptors")
 def test_windows_backup_and_replacement_preserve_protected_dacl(tmp_path):
+    if os.name != "nt":
+        pytest.skip("Windows security descriptors")
+
     import ctypes
     from ctypes import wintypes
 
