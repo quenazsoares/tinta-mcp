@@ -1,35 +1,50 @@
 #!/usr/bin/env python3
-"""
-Entry point for Inkscape MCP Server
-"""
+"""Command-line entry point for the Tinta server and installer."""
 
+import argparse
 import sys
 
-if sys.platform == "win32":
-    # Ensure stdout/stderr use UTF-8 on Windows to avoid cp1252 encoding errors with emojis
-    try:
-        reconfigure_stdout = getattr(sys.stdout, "reconfigure", None)
-        if callable(reconfigure_stdout):
-            reconfigure_stdout(encoding="utf-8")
-        reconfigure_stderr = getattr(sys.stderr, "reconfigure", None)
-        if callable(reconfigure_stderr):
-            reconfigure_stderr(encoding="utf-8")
-    except Exception:
-        pass
+from tintamcp import installer
 
-if any(argument.split("=", 1)[0] == "--enable-python" for argument in sys.argv[1:]):
-    sys.stderr.write(
-        "error: --enable-python was removed; Tinta supports structured SVG operations only.\n"
+
+def main(arguments: list[str] | None = None) -> None:
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                try:
+                    reconfigure(encoding="utf-8")
+                except (OSError, ValueError):
+                    pass
+    arguments = sys.argv[1:] if arguments is None else arguments
+    parser = argparse.ArgumentParser(
+        prog="tinta-mcp",
+        description="Connect AI assistants to Inkscape through MCP.\n"
+        "Run without a command to start the server.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sys.exit(2)
+    commands = parser.add_subparsers(dest="command", title="commands")
+    install = commands.add_parser(
+        "install",
+        help="Install the extension and set up supported clients",
+        description="Install the Tinta extension and set up supported clients.",
+    )
+    installer.add_install_arguments(install)
+    if any(argument.split("=", 1)[0] == "--enable-python" for argument in arguments):
+        parser.error("--enable-python was removed; Tinta supports structured SVG operations only.")
+    options = parser.parse_args(arguments)
+    if options.command == "install":
+        installer.run_installer(
+            auto_yes=options.yes,
+            agents=tuple(options.agent),
+            dry_run=options.dry_run,
+            only=options.only,
+        )
+    else:
+        from tintamcp.server import main as run_server
 
-if len(sys.argv) > 1 and sys.argv[1] == "install":
-    from tintamcp.installer import install_from_args
+        run_server([])
 
-    install_from_args(sys.argv[2:])
-    sys.exit(0)
-
-from tintamcp.server import main
 
 if __name__ == "__main__":
     main()

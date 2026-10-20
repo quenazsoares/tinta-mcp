@@ -34,7 +34,8 @@ def main() -> None:
                 installer, "get_agent_context", return_value=AgentContext(home, "linux", {})
             ),
         ):
-            installer.run_installer(auto_yes=True)
+            with patch.object(sys.stdin, "isatty", return_value=False):
+                installer.run_installer(auto_yes=True)
             (skills / "tinta-designer" / "SKILL.md").write_text("old skill", encoding="utf-8")
             notes = skills / "tinta-designer" / "personal.md"
             notes.write_text("keep these notes", encoding="utf-8")
@@ -42,9 +43,9 @@ def main() -> None:
                 patch.object(sys.stdin, "isatty", return_value=True),
                 patch("builtins.input", return_value="y"),
             ):
-                installer.run_installer(auto_yes=True, configure_mcp=True)
+                installer.run_installer(auto_yes=True)
                 backups_before = set(home.rglob("*.bak-*"))
-                installer.run_installer(auto_yes=True, configure_mcp=True)
+                installer.run_installer(auto_yes=True)
                 if set(home.rglob("*.bak-*")) != backups_before:
                     raise RuntimeError("Repeated configuration created extra backups")
             if notes.read_text(encoding="utf-8") != "keep these notes":

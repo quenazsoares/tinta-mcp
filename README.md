@@ -24,26 +24,30 @@ Install the Inkscape extension from the PyPI package:
 uvx tinta-mcp install
 ```
 
-The installer copies the extension to your Inkscape user extensions directory and offers to install the AI assistant skill in supported agent directories. Add `--yes` to accept skill installation and updates. Creating an additional skill copy and changing MCP configuration require separate confirmation.
+The installer copies the extension to your Inkscape user extensions directory, offers to install the AI assistant skill, and offers MCP configuration for supported clients. Skills and MCP changes have separate confirmations. Add `--yes` to accept skill installation and updates; creating an additional skill copy and changing MCP configuration still require approval.
 
-Restart Inkscape after installation and open a document, then configure your MCP client below. You do not need to clone the repository or create a virtual environment.
+Restart Inkscape after installation and open a document. For clients without automatic MCP setup, follow the manual configuration below. You do not need to clone the repository or create a virtual environment.
 
 ## Client configuration
 
-For Codex and Antigravity App/IDE, the installer can configure the MCP connection after showing the proposed changes and asking for approval:
-
-```bash
-uvx tinta-mcp install --configure-mcp
-```
+For Codex and Antigravity App/IDE, the default installation includes MCP setup. It shows the proposed changes and asks for approval before editing each configuration file.
 
 To choose a client or preview the installation without changing files:
 
 ```bash
-uvx tinta-mcp install --agent codex --configure-mcp
-uvx tinta-mcp install --agent codex --configure-mcp --dry-run
+uvx tinta-mcp install --agent codex
+uvx tinta-mcp install --agent codex --dry-run
 ```
 
 Repeat `--agent` to select more than one client. Existing configuration files are backed up before changes. See [agent integrations](docs/agent-integrations.md) for supported paths, backup restoration, and adding a client to the catalog.
+
+To configure MCP without reinstalling the extension or skills:
+
+```bash
+uvx tinta-mcp install --only mcp --agent codex
+```
+
+Use `--only skills` or `--only extension` to run those steps separately. The installer shows its package version and a final summary of installed, unchanged, skipped, planned, and failed steps. Add `--dry-run` to preview a selected step without writing files.
 
 ### Manual configuration
 

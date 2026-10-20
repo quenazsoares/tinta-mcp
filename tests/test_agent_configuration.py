@@ -123,3 +123,23 @@ def test_antigravity_disabled_flag_is_enabled_explicitly():
 def test_nonstandard_json_numbers_are_conflicts(number):
     change = prepare_mcp_change(target(), b'{"other":' + number + b"}", SERVER)
     assert change.status == "conflict"
+
+
+@pytest.mark.parametrize(
+    "before,adapter,reason",
+    [
+        (b"{broken", "json-mcpServers", "Invalid JSON"),
+        (b"[broken", "toml-codex", "Invalid TOML"),
+        (b'{"mcpServers":[]}', "json-mcpServers", "Servers must be an object"),
+        (
+            b'{"mcpServers":{"tinta":{"url":"https://secret-host"}}}',
+            "json-mcpServers",
+            "Incompatible transport",
+        ),
+    ],
+)
+def test_conflicts_explain_the_reason_without_exposing_values(before, adapter, reason):
+    change = prepare_mcp_change(target(adapter), before, SERVER)
+    assert change.status == "conflict"
+    assert reason in change.preview
+    assert "secret-host" not in change.preview

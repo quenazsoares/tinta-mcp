@@ -1177,10 +1177,10 @@ def export_preview(max_size: Annotated[int, Field(ge=1, le=4096)] = 800) -> Imag
     return preview
 
 
-def main():
+def main(arguments: list[str] | None = None):
     """Run the Inkscape MCP server"""
     parser = argparse.ArgumentParser(description="Tinta MCP server (structured SVG operations)")
-    parser.parse_args()
+    parser.parse_args(arguments)
     logger.info("Starting Tinta MCP Server...")
     mcp.run()
 

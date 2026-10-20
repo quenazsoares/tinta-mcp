@@ -13,6 +13,10 @@ from tomlkit.exceptions import TOMLKitError
 from .detection import DetectedTarget
 
 
+class _ConfigurationConflict(ValueError):
+    """A structural diagnosis that contains no configuration values."""
+
+
 @dataclass(frozen=True)
 class McpServerSpec:
     command: str
@@ -32,13 +36,13 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("Duplicate JSON key")
+            raise _ConfigurationConflict("Duplicate JSON key")
         result[key] = value
     return result
 
 
 def _reject_constant(value: str) -> None:
-    raise ValueError("Nonstandard JSON number")
+    raise _ConfigurationConflict("Nonstandard JSON number")
 
 
 def _equivalent_command(current: object, desired: str) -> bool:
@@ -56,7 +60,7 @@ def prepare_mcp_change(
 ) -> ConfigChange:
     try:
         if target.capability != "mcp" or target.adapter is None:
-            raise ValueError("Not an MCP configuration target")
+            raise _ConfigurationConflict("Not an MCP configuration target")
         bom = before is not None and before.startswith(b"\xef\xbb\xbf")
         source = before.decode("utf-8-sig") if before is not None else ""
         is_json = target.adapter == "json-mcpServers"
@@ -73,32 +77,32 @@ def prepare_mcp_change(
             document = tomlkit.parse(source)
             root = "mcp_servers"
         else:
-            raise ValueError("Unknown configuration adapter")
+            raise _ConfigurationConflict("Unknown configuration adapter")
         if not isinstance(document, MutableMapping):
-            raise ValueError("Configuration root must be an object")
+            raise _ConfigurationConflict("Configuration root must be an object")
         if root not in document:
             document[root] = {} if is_json else tomlkit.table()
         servers = document[root]
         if not isinstance(servers, MutableMapping):
-            raise ValueError("Servers must be an object")
+            raise _ConfigurationConflict("Servers must be an object")
         if "tinta" not in servers:
             servers["tinta"] = {} if is_json else tomlkit.table()
         entry = servers["tinta"]
         if not isinstance(entry, MutableMapping):
-            raise ValueError("Tinta must be an object")
+            raise _ConfigurationConflict("Tinta must be an object")
         if any(k in entry for k in ("url", "serverUrl", "httpUrl", "type", "transport")):
-            raise ValueError("Incompatible transport")
+            raise _ConfigurationConflict("Incompatible transport")
         if "command" in entry and not isinstance(entry["command"], str):
-            raise ValueError("Invalid command")
+            raise _ConfigurationConflict("Invalid command")
         if "args" in entry and (
             not isinstance(entry["args"], list)
             or not all(isinstance(x, str) for x in entry["args"])
         ):
-            raise ValueError("Invalid arguments")
+            raise _ConfigurationConflict("Invalid arguments")
         if "enabled" in entry and not isinstance(entry["enabled"], bool):
-            raise ValueError("Invalid enabled flag")
+            raise _ConfigurationConflict("Invalid enabled flag")
         if "disabled" in entry and not isinstance(entry["disabled"], bool):
-            raise ValueError("Invalid disabled flag")
+            raise _ConfigurationConflict("Invalid disabled flag")
         enabled = entry.get("enabled") is not False and entry.get("disabled") is not True
         if (
             _equivalent_command(entry.get("command"), server.command)
@@ -146,11 +150,20 @@ def prepare_mcp_change(
         return ConfigChange(
             target.path, before, after, "create" if before is None else "update", preview
         )
-    except (ValueError, TypeError, UnicodeError, TOMLKitError):
-        return ConfigChange(
-            target.path,
-            before,
-            None,
-            "conflict",
-            "Cannot safely edit this configuration. Configure Tinta manually; the file is unchanged.",
-        )
+    except _ConfigurationConflict as error:
+        reason = str(error)
+    except json.JSONDecodeError:
+        reason = "Invalid JSON (comments and trailing commas are not supported)"
+    except TOMLKitError:
+        reason = "Invalid TOML"
+    except UnicodeError:
+        reason = "Configuration must use UTF-8 encoding"
+    except (ValueError, TypeError):
+        reason = "Unsupported configuration value"
+    return ConfigChange(
+        target.path,
+        before,
+        None,
+        "conflict",
+        f"{reason}. Configure Tinta manually; the file is unchanged.",
+    )

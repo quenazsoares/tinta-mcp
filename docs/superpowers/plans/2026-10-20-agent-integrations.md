@@ -25,6 +25,9 @@ A implementação suporta instalações globais no Windows e Linux, com Python >
 
 - A detecção apenas consulta caminhos conhecidos. A existência de uma pasta indica configuração disponível, sem comprovar a instalação do aplicativo.
 - `--agent` seleciona os perfis; `--dry-run` não cria arquivos, pastas ou backups.
+- O comando `install` inclui a extensão e oferece instalação de skills e configuração MCP por padrão. A ajuda raiz apresenta os subcomandos; executar sem subcomando inicia o servidor.
+- `--only` permite executar apenas extensão, skills ou configuração MCP. A saída informa a versão do pacote e resume o resultado por componente.
+- Falhas de configuração de um cliente são informadas sem impedir operações independentes. A descoberta do perfil Inkscape tenta os executáveis disponíveis antes de recorrer ao caminho padrão, com aviso explícito.
 - `--yes` aceita instalação e atualização de skills. Criar outra cópia quando já existe uma instalação em um caminho alternativo exige confirmação explícita.
 - Skill e MCP têm aprovações separadas. MCP requer confirmação por arquivo, com resposta padrão negativa e terminal interativo.
 - Destinos compartilhados recebem uma operação. Instalações em diretórios diferentes são mantidas; não há migração silenciosa.

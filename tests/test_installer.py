@@ -5,6 +5,7 @@ import pytest
 from tintamcp import installer
 from tintamcp.agents.catalog import AgentContext
 from tintamcp.agents.detection import DetectedTarget
+from tintamcp.main import main as cli_main
 
 
 def test_installer_copies_complete_extension_to_user_directory(tmp_path, monkeypatch):
@@ -33,16 +34,19 @@ def installation(tmp_path, monkeypatch):
     monkeypatch.setattr(installer, "get_inkscape_extensions_dir", lambda: extension)
     monkeypatch.setattr(installer.shutil, "which", lambda name: "/usr/bin/uvx")
     monkeypatch.setattr(installer.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "n")
     return home, extension
 
 
-def test_shared_skill_is_only_copied_once(installation, monkeypatch, capsys):
+def test_shared_destinations_prompt_once_per_component(installation, monkeypatch, capsys):
     home, _ = installation
     (home / ".gemini/config").mkdir(parents=True)
     calls = []
     monkeypatch.setattr("builtins.input", lambda prompt: calls.append(prompt) or "y")
     installer.run_installer()
-    assert len(calls) == 1
+    assert len(calls) == 2
+    assert sum("skill" in prompt for prompt in calls) == 1
+    assert sum("MCP" in prompt for prompt in calls) == 1
     assert (home / ".gemini/config/skills/tinta-designer/SKILL.md").is_file()
     assert capsys.readouterr().out.count("Antigravity App, Antigravity IDE (") == 1
 
@@ -63,7 +67,7 @@ def test_skill_decline_and_interrupt_do_not_copy(installation, monkeypatch, answ
 
 def test_dry_run_never_writes_even_extension_directory(installation, capsys):
     home, extension = installation
-    installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True, dry_run=True)
+    installer.run_installer(auto_yes=True, agents=("codex",), dry_run=True)
     assert not extension.exists()
     assert list(home.iterdir()) == []
     assert "command" in capsys.readouterr().out
@@ -85,7 +89,7 @@ def test_mcp_has_separate_approval_and_backup(installation, monkeypatch):
     config.write_bytes(before)
     answers = iter(["n", "y"])
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
-    installer.run_installer(agents=("codex",), configure_mcp=True)
+    installer.run_installer(agents=("codex",))
     assert not (home / ".agents").exists()
     assert b"--from" not in config.read_bytes()
     assert next(config.parent.glob("config.toml.bak-*")).read_bytes() == before
@@ -101,7 +105,7 @@ def test_yes_never_approves_mcp(installation, monkeypatch, answer):
         return answer
 
     monkeypatch.setattr("builtins.input", reply)
-    installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True)
+    installer.run_installer(auto_yes=True, agents=("codex",))
     assert (home / ".agents/skills/tinta-designer/SKILL.md").is_file()
     assert not (home / ".codex/config.toml").exists()
 
@@ -110,7 +114,7 @@ def test_noninteractive_yes_cannot_configure_mcp(installation, monkeypatch):
     home, _ = installation
     monkeypatch.setattr(installer.sys.stdin, "isatty", lambda: False)
     monkeypatch.setattr("builtins.input", lambda _: pytest.fail("unexpected prompt"))
-    installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True)
+    installer.run_installer(auto_yes=True, agents=("codex",))
     assert not (home / ".codex/config.toml").exists()
 
 
@@ -122,7 +126,7 @@ def test_unchanged_skill_and_mcp_do_not_prompt_or_create_backups(installation, m
     config.write_bytes(before)
     installer.run_installer(auto_yes=True, agents=("codex",))
     monkeypatch.setattr("builtins.input", lambda _: pytest.fail("unexpected prompt"))
-    installer.run_installer(agents=("codex",), configure_mcp=True)
+    installer.run_installer(agents=("codex",))
     assert config.read_bytes() == before
     assert not list(config.parent.glob("*.bak-*"))
 
@@ -131,7 +135,7 @@ def test_missing_uvx_is_reported_without_writing_config(installation, monkeypatc
     home, _ = installation
     monkeypatch.setattr(installer.shutil, "which", lambda _: None)
     with pytest.raises(SystemExit) as exc:
-        installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True)
+        installer.run_installer(auto_yes=True, agents=("codex",))
     assert exc.value.code == 1
     assert not (home / ".codex/config.toml").exists()
     assert "uvx" in capsys.readouterr().out
@@ -146,12 +150,13 @@ def test_partial_failure_reports_successful_configuration_and_exits_nonzero(
     bad.write_text("invalid json")
     monkeypatch.setattr("builtins.input", lambda _: "y")
     with pytest.raises(SystemExit) as exc:
-        installer.run_installer(auto_yes=True, agents=("codex", "antigravity"), configure_mcp=True)
+        installer.run_installer(auto_yes=True, agents=("codex", "antigravity"))
     assert exc.value.code == 1
     assert (home / ".codex/config.toml").is_file()
     assert bad.read_text() == "invalid json"
     output = capsys.readouterr().out
     assert "Configured" in output and "Error" in output
+    assert output.count("Invalid JSON") == 1
 
 
 def test_mcp_preview_is_printed_before_asking_for_approval(installation, monkeypatch, capsys):
@@ -160,27 +165,23 @@ def test_mcp_preview_is_printed_before_asking_for_approval(installation, monkeyp
         return "n"
 
     monkeypatch.setattr("builtins.input", answer)
-    installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True)
+    installer.run_installer(auto_yes=True, agents=("codex",))
 
 
 def test_install_cli_parsing_and_rejection(monkeypatch):
     calls = []
     monkeypatch.setattr(installer, "run_installer", lambda **kw: calls.append(kw))
-    installer.install_from_args(
-        ["--agent", "codex", "--agent", "cursor", "--yes", "--dry-run", "--configure-mcp"]
-    )
-    assert calls == [
-        dict(auto_yes=True, agents=("codex", "cursor"), dry_run=True, configure_mcp=True)
-    ]
+    cli_main(["install", "--agent", "codex", "--agent", "cursor", "--yes", "--dry-run"])
+    assert calls == [dict(auto_yes=True, agents=("codex", "cursor"), dry_run=True, only=None)]
     with pytest.raises(SystemExit) as exc:
-        installer.install_from_args(["--unknown"])
+        cli_main(["install", "--unknown"])
     assert exc.value.code == 2
 
 
 def test_empty_reply_does_not_approve_mcp(installation, monkeypatch):
     home, _ = installation
     monkeypatch.setattr("builtins.input", lambda _: "")
-    installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True)
+    installer.run_installer(auto_yes=True, agents=("codex",))
     assert not (home / ".codex/config.toml").exists()
 
 
@@ -190,7 +191,7 @@ def test_relative_path_lookup_is_resolved_before_mcp_configuration(installation,
     home, _ = installation
     monkeypatch.setattr(installer.shutil, "which", lambda _: "tools/uvx.exe")
     monkeypatch.setattr("builtins.input", lambda _: "y")
-    installer.run_installer(auto_yes=True, agents=("codex",), configure_mcp=True)
+    installer.run_installer(auto_yes=True, agents=("codex",))
     data = tomllib.loads((home / ".codex/config.toml").read_text())
     assert Path(data["mcp_servers"]["tinta"]["command"]).is_absolute()
 
@@ -279,7 +280,9 @@ def test_legacy_copy_requires_confirmation_even_with_yes(installation, monkeypat
     monkeypatch.setattr("builtins.input", lambda prompt: calls.append(prompt) or "n")
     installer.run_installer(auto_yes=True)
     assert not (home / ".gemini/config/skills/tinta-designer").exists()
-    assert len(calls) == 1
+    assert len(calls) == 2
+    assert sum("another skill copy" in prompt for prompt in calls) == 1
+    assert sum("MCP" in prompt for prompt in calls) == 1
     assert "another copy" in capsys.readouterr().out
 
 
@@ -326,3 +329,134 @@ def test_json_adapter_reload_message_does_not_name_a_client(installation, capsys
     output = capsys.readouterr().out
     assert "Antigravity" not in output
     assert "restart" in output.lower()
+
+
+def test_only_mcp_does_not_probe_or_install_extension_or_skills(installation, monkeypatch):
+    home, extension = installation
+    monkeypatch.setattr(
+        installer, "get_inkscape_extensions_dir", lambda: pytest.fail("unexpected Inkscape lookup")
+    )
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    installer.run_installer(agents=("codex",), only="mcp")
+    assert (home / ".codex/config.toml").is_file()
+    assert not extension.exists()
+    assert not (home / ".agents").exists()
+
+
+def test_only_skills_ignores_invalid_codex_mcp_location(installation, monkeypatch):
+    home, extension = installation
+    monkeypatch.setattr(
+        installer,
+        "get_agent_context",
+        lambda: AgentContext(home, "linux", {"CODEX_HOME": "relative"}),
+    )
+    installer.run_installer(auto_yes=True, agents=("codex",), only="skills")
+    assert (home / ".agents/skills/tinta-designer/SKILL.md").is_file()
+    assert not extension.exists()
+
+
+def test_only_extension_does_not_detect_agents(installation, monkeypatch):
+    _, extension = installation
+    monkeypatch.setattr(
+        installer, "get_agent_context", lambda: pytest.fail("unexpected agent detection")
+    )
+    installer.run_installer(only="extension")
+    assert (extension / "tinta_mcp.inx").is_file()
+
+
+def test_bad_codex_home_reports_error_but_continues_other_clients(
+    installation, monkeypatch, capsys
+):
+    home, extension = installation
+    (home / ".gemini/config").mkdir(parents=True)
+    monkeypatch.setattr(
+        installer,
+        "get_agent_context",
+        lambda: AgentContext(home, "linux", {"CODEX_HOME": "relative"}),
+    )
+    with pytest.raises(SystemExit) as exc:
+        installer.run_installer(auto_yes=True)
+    assert exc.value.code == 1
+    assert (extension / "tinta_mcp.py").is_file()
+    assert (home / ".gemini/config/skills/tinta-designer/SKILL.md").is_file()
+    output = capsys.readouterr().out
+    assert "CODEX_HOME" in output
+    assert "Summary" in output
+    assert "Codex: error" in output
+
+
+def test_header_shows_executed_package_version_and_summary(installation, monkeypatch, capsys):
+    monkeypatch.setattr(installer, "version", lambda _: "9.8.7")
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    installer.run_installer(agents=("codex",))
+    output = capsys.readouterr().out
+    assert "Tinta MCP 9.8.7" in output
+    assert "Summary" in output
+    assert "Inkscape extension: installed" in output
+    assert "Codex skill: skipped" in output
+    assert "Codex MCP: skipped" in output
+
+
+def test_only_mcp_reports_manual_setup_for_unsupported_client(installation, capsys):
+    installer.run_installer(agents=("cursor",), only="mcp")
+    assert "Cursor MCP: skipped (manual setup)" in capsys.readouterr().out
+
+
+def test_only_mcp_dry_run_has_planned_summary_without_any_write(installation, monkeypatch, capsys):
+    home, extension = installation
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("unexpected prompt"))
+    installer.run_installer(agents=("codex",), only="mcp", dry_run=True)
+    assert list(home.iterdir()) == [] and not extension.exists()
+    output = capsys.readouterr().out
+    assert "Codex MCP: planned" in output
+    assert "no changes written" in output
+
+
+def test_default_install_offers_skills_and_mcp_with_separate_approvals(installation, monkeypatch):
+    home, extension = installation
+    (home / ".codex").mkdir()
+    prompts = []
+    answers = iter(["y", "n"])
+    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or next(answers))
+    installer.run_installer()
+    assert len(prompts) == 2
+    assert "skill" in prompts[0] and "MCP" in prompts[1]
+    assert (extension / "tinta_mcp.py").is_file()
+    assert (home / ".agents/skills/tinta-designer/SKILL.md").is_file()
+    assert not (home / ".codex/config.toml").exists()
+
+
+def test_default_install_can_configure_mcp_when_approved(installation, monkeypatch):
+    home, _ = installation
+    (home / ".codex").mkdir()
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    installer.run_installer()
+    assert (home / ".codex/config.toml").is_file()
+
+
+def test_default_dry_run_includes_mcp_without_writing(installation, monkeypatch, capsys):
+    home, extension = installation
+    (home / ".codex").mkdir()
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("unexpected prompt"))
+    installer.run_installer(dry_run=True)
+    output = capsys.readouterr().out
+    assert "Codex MCP: planned" in output
+    assert not (home / ".codex/config.toml").exists()
+    assert not extension.exists()
+
+
+def test_default_yes_does_not_approve_mcp_without_terminal(installation, monkeypatch, capsys):
+    home, _ = installation
+    (home / ".codex").mkdir()
+    monkeypatch.setattr(installer.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("unexpected prompt"))
+    installer.run_installer(auto_yes=True)
+    assert not (home / ".codex/config.toml").exists()
+    assert "Codex MCP: skipped" in capsys.readouterr().out
+
+
+def test_cli_without_mcp_flag_includes_mcp_preview(installation, capsys):
+    home, _ = installation
+    (home / ".codex").mkdir()
+    cli_main(["install", "--dry-run"])
+    assert "Codex MCP: planned" in capsys.readouterr().out

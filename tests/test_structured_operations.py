@@ -328,13 +328,13 @@ def test_collecting_smoke_module_never_probes_running_session():
 
 
 def test_removed_flag_is_rejected_before_installation():
-    import runpy
+    from tintamcp.main import main
 
     with (
         patch.object(sys, "argv", ["tinta", "install", "--enable-python"]),
         patch("tintamcp.installer.run_installer") as installer,
     ):
         with pytest.raises(SystemExit) as error:
-            runpy.run_module("tintamcp.main", run_name="__main__")
+            main()
         assert error.value.code == 2
         installer.assert_not_called()

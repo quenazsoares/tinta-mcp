@@ -22,33 +22,49 @@ Skill updates replace bundled files and keep additional files. The installer pre
 
 ## Installing and previewing
 
-Install the extension and choose whether to install skills:
+The default command installs the extension, then offers skill installation and MCP configuration for supported clients. Each MCP file requires separate approval:
 
 ```bash
 uvx tinta-mcp install
 ```
 
-Select a profile and offer MCP configuration:
+Select a profile:
 
 ```bash
-uvx tinta-mcp install --agent codex --configure-mcp
+uvx tinta-mcp install --agent codex
 ```
 
 Preview all steps without creating directories, backups, or files:
 
 ```bash
-uvx tinta-mcp install --agent codex --configure-mcp --dry-run
+uvx tinta-mcp install --agent codex --dry-run
 ```
 
 Repeat `--agent` to choose multiple profiles. Explicit selection permits offering a destination even when its directory does not exist yet. Without selection, the installer only offers profiles with existing configuration directories.
 
-`--yes` accepts skill installation and updates, except for creating an additional copy as described above. MCP edits always require separate approval in an interactive terminal. An empty answer, EOF, or Ctrl+C skips an MCP change. Extension installation remains part of each non-preview run.
+To run just one step:
+
+```bash
+uvx tinta-mcp install --only mcp --agent codex
+uvx tinta-mcp install --only skills --agent antigravity
+uvx tinta-mcp install --only extension
+```
+
+`--only mcp` does not look up Inkscape or copy extension/skill files. `--only skills` also runs without looking up Inkscape and does not configure MCP. `--only extension` handles just the Inkscape extension.
+
+Run `tinta-mcp --help` to see the available commands, or `tinta-mcp install --help` for installation options. Running `tinta-mcp` without a command starts the MCP server.
+
+The header identifies the package version being executed. The final summary lists the outcome of each requested operation: installed, configured, unchanged, skipped, planned (dry run), or error. A bad client path, such as a relative `CODEX_HOME`, is reported without preventing independent client operations; the command still returns a nonzero status when errors occur.
+
+When locating the Inkscape profile, the installer tries the available executables before using a standard directory. It warns when a query fails or a fallback is needed; check a fallback path against your Inkscape preferences before installing there.
+
+`--yes` accepts skill installation and updates, except for creating an additional copy as described above. MCP edits always require separate approval in an interactive terminal. An empty answer, EOF, or Ctrl+C skips an MCP change. Extension installation is automatic in the default flow; `--only` limits which steps run.
 
 ## Configuration changes and backups
 
 The installer resolves `uvx` from PATH and proposes a `tinta` entry with that executable and the argument `tinta-mcp`. It does not add `@latest`. If the entry already matches, it leaves the file untouched and creates no backup. An older entry, including one pointing to TestPyPI, requires approval to update its command and arguments. Enabling a disabled entry is shown in the preview.
 
-Other servers and compatible Tinta settings, such as environment variables and timeouts, are retained. Previews show the new managed fields, without displaying existing credentials or full configuration files. TOML comments are retained. Strict JSON is reformatted with two-space indentation; JSONC, malformed configurations, and incompatible remote entries require manual setup.
+Other servers and compatible Tinta settings, such as environment variables and timeouts, are retained. Previews show the new managed fields, without displaying existing credentials or full configuration files. TOML comments are retained. Strict JSON is reformatted with two-space indentation. JSONC, malformed configurations, and incompatible remote entries require manual setup; the installer explains the type of conflict without printing configuration values.
 
 Before updating an existing file, the installer creates an adjacent backup named like `config.toml.bak-<unique suffix>`, preserving the original bytes and access protections. New files need no backup. It validates the proposed content, writes a temporary file beside the destination, and replaces the destination after checking that the original still matches the approved snapshot.
 

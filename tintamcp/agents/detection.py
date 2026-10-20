@@ -1,5 +1,6 @@
 """Resolve available integration destinations and explain their evidence."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
@@ -29,6 +30,8 @@ def detect_agent_targets(
     selected: tuple[str, ...] = (),
     *,
     profiles: tuple[AgentProfile, ...] | None = None,
+    capability: Literal["skill", "mcp"] | None = None,
+    on_error: Callable[[str, str], None] | None = None,
 ) -> tuple[DetectedTarget, ...]:
     profiles = get_agent_profiles() if profiles is None else profiles
     unknown = set(selected) - {p.id for p in profiles}
@@ -41,7 +44,7 @@ def detect_agent_targets(
     # Profiles with the same preferred destination may also load older paths.
     # Record installed copies so a new destination cannot silently duplicate one.
     installed_by_preferred: dict[str, set[Path]] = {}
-    for profile in profiles:
+    for profile in profiles if capability != "mcp" else ():
         if profile.skill_paths:
             preferred = key_for(profile.skill_paths[0].resolve(context).resolve())
             installed = installed_by_preferred.setdefault(preferred, set())
@@ -54,9 +57,15 @@ def detect_agent_targets(
     for profile in profiles:
         if selected and profile.id not in selected:
             continue
-        skill_paths = [r.resolve(context) for r in profile.skill_paths]
-        mcp = profile.mcp
-        config = mcp.path.resolve(context) if mcp else None
+        try:
+            skill_paths = [r.resolve(context) for r in profile.skill_paths]
+            mcp = profile.mcp
+            config = mcp.path.resolve(context) if mcp and capability != "skill" else None
+        except (OSError, ValueError) as error:
+            if on_error is None:
+                raise
+            on_error(profile.label, str(error))
+            continue
         available = any(p.parent.is_dir() for p in skill_paths) or (
             config is not None and config.parent.is_dir()
         )
@@ -64,14 +73,16 @@ def detect_agent_targets(
             continue
         # Reuse an installed skill, including a supported legacy location.
         existing = [p for p in skill_paths if (p / "tinta-designer").is_dir()]
-        paths: list[tuple[Path, Literal["skill", "mcp"], Adapter | None]] = [
-            (p, "skill", None) for p in (existing or skill_paths[:1])
-        ]
+        paths: list[tuple[Path, Literal["skill", "mcp"], Adapter | None]] = (
+            [(p, "skill", None) for p in (existing or skill_paths[:1])]
+            if capability != "mcp"
+            else []
+        )
         if config is not None and mcp is not None:
             paths.append((config, "mcp", mcp.adapter))
-        for path, capability, adapter in paths:
+        for path, target_capability, adapter in paths:
             actual = path.resolve()
-            key = (key_for(actual), capability)
+            key = (key_for(actual), target_capability)
             alternatives = (
                 installed_by_preferred.get(key_for(skill_paths[0].resolve()), set())
                 if skill_paths
@@ -79,14 +90,14 @@ def detect_agent_targets(
             )
             target = DetectedTarget(
                 actual,
-                capability,
+                target_capability,
                 (profile.id,),
                 (profile.label,),
                 "explicit selection" if selected else "configuration directory found",
                 adapter,
                 redirected(path) and not bool(selected),
                 tuple(sorted((p for p in alternatives if key_for(p) != key_for(actual)), key=str))
-                if capability == "skill"
+                if target_capability == "skill"
                 else (),
             )
             if key in found:

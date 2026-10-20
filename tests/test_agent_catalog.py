@@ -106,3 +106,11 @@ def test_new_shared_destination_reports_existing_legacy_copy(tmp_path):
         t for t in targets if t.capability == "skill" and t.profile_ids == ("antigravity-ide",)
     )
     assert existing.path == legacy.resolve()
+
+
+def test_default_detection_keeps_skills_after_an_mcp_profile(tmp_path):
+    ctx = context(tmp_path)
+    (ctx.home / ".codex").mkdir(parents=True)
+    (ctx.home / ".cursor").mkdir()
+    targets = detect_agent_targets(ctx)
+    assert {t.profile_ids for t in targets if t.capability == "skill"} == {("codex",), ("cursor",)}
