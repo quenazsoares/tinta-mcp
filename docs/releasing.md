@@ -36,6 +36,8 @@ Use the workflow filename, without the `.github/workflows/` prefix. Both account
 
 Trusted Publishing uses temporary credentials issued to GitHub Actions. This workflow does not use `TEST_PYPI_API_TOKEN` or `PYPI_API_TOKEN` secrets. Your local GPG key stays on your machine; it is used to sign commits and tags, not to authenticate package uploads.
 
+The publishing jobs use `pypa/gh-action-pypi-publish`, pinned to a commit, to generate and upload PEP 740 publish attestations for the wheel and source distribution. Each index receives attestations signed with its publishing job's GitHub Actions identity through Sigstore. These provide verifiable evidence of the publisher in PyPI's provenance information. No additional signing key or token is required.
+
 See the [PyPI publisher setup](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) and [GitHub environment rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
 
 ## Prepare a version
@@ -78,7 +80,7 @@ Candidates stop after TestPyPI validation. If a candidate needs a fix, prepare t
 
 For a final release, prepare `0.2.2` using the same steps. After TestPyPI validation, the `pypi` job waits for the configured environment approval. Review the results under **Actions > Release**, then use **Review deployments** to approve publication. PyPI receives the same files tested on TestPyPI. Changing an `rc` version to a final version creates new artifacts, which are tested again.
 
-Each index retains its published version's files. Publish changed contents under a new version. An unchanged upload can be retried; the workflow checks existing files before uploading.
+Each index retains its published version's files. Publish changed contents under a new version. Retried uploads skip files that already exist; TestPyPI validation still compares the published files with the build hashes. Attestations accompany new uploads. Retrying an existing upload does not add provenance to files previously published without attestations.
 
 ## Manual runs
 
