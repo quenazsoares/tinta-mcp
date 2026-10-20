@@ -70,6 +70,8 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
+          python-version: "3.13"
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}-3.13
 
       - name: Set up Python
         run: uv python install 3.13
@@ -100,6 +102,8 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
+          python-version: "3.13"
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}-3.13
 
       - name: Set up Python
         run: uv python install 3.13
@@ -134,12 +138,21 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
+          python-version: ${{ matrix.python-version }}
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}-${{ matrix.python-version }}
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
       - name: Sync dependencies
         run: uv sync --all-groups --python ${{ matrix.python-version }}
+
+      - name: Verify Python version
+        run: >-
+          uv run python -c "import os, sys;
+          expected = tuple(map(int, os.environ['UV_PYTHON'].split('.')));
+          print(sys.version);
+          assert sys.version_info[:2] == expected, (sys.version_info[:2], expected)"
 
       - name: Validate Windows installer syntax
         if: matrix.os == 'windows-latest'
@@ -181,6 +194,8 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
+          python-version: "3.13"
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}-3.13
 
       - name: Set up Python
         run: uv python install 3.13
