@@ -24,11 +24,28 @@ Install the Inkscape extension from the PyPI package:
 uvx tinta-mcp install
 ```
 
-The installer copies the extension to your Inkscape user extensions directory and prints the MCP client configuration. It also offers to install the AI assistant skill in any supported agent directories it detects. Add `--yes` to accept all detected skill installations without prompts.
+The installer copies the extension to your Inkscape user extensions directory and offers to install the AI assistant skill in supported agent directories. Add `--yes` to accept skill installation and updates. Creating an additional skill copy and changing MCP configuration require separate confirmation.
 
 Restart Inkscape after installation and open a document, then configure your MCP client below. You do not need to clone the repository or create a virtual environment.
 
 ## Client configuration
+
+For Codex and Antigravity App/IDE, the installer can configure the MCP connection after showing the proposed changes and asking for approval:
+
+```bash
+uvx tinta-mcp install --configure-mcp
+```
+
+To choose a client or preview the installation without changing files:
+
+```bash
+uvx tinta-mcp install --agent codex --configure-mcp
+uvx tinta-mcp install --agent codex --configure-mcp --dry-run
+```
+
+Repeat `--agent` to select more than one client. Existing configuration files are backed up before changes. See [agent integrations](docs/agent-integrations.md) for supported paths, backup restoration, and adding a client to the catalog.
+
+### Manual configuration
 
 Add this entry to your client's MCP configuration, such as `claude_desktop_config.json` or `mcp_config.json`:
 
@@ -49,7 +66,7 @@ Tinta provides structured SVG operations. It does not run arbitrary Python or te
 
 ### AI assistant skill
 
-The installer checks for Claude, Cursor, and Gemini/Antigravity skill directories and asks before copying `tinta-designer` into them. The skill provides workflows for batch element creation, non-destructive canvas edits, and visual verification.
+The installer checks for Codex, Antigravity App/IDE, Claude Code, and Cursor skill destinations and asks before copying `tinta-designer` into them. Shared destinations are handled once. Updates preserve additional files, and unchanged skills are left as they are. The skill provides workflows for batch element creation, non-destructive canvas edits, and visual verification.
 
 For manual installation or other agents, download `tinta-designer-skill.zip` from the [latest release](https://github.com/quenazsoares/tinta-mcp/releases/latest) and extract the `tinta-designer` directory into your agent's skills folder.
 
