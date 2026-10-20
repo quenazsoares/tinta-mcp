@@ -2,9 +2,10 @@
 
 ![Tinta — Inkscape × AI × MCP. Give your AI a vector editor.](https://raw.githubusercontent.com/quenazsoares/tinta-mcp/main/assets/tinta-mcp-banner.png)
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![FastMCP 4.0](https://img.shields.io/badge/FastMCP-4.0-green.svg)](https://github.com/jlowin/fastmcp)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![PyPI version](https://img.shields.io/pypi/v/tinta-mcp.svg?style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/tinta-mcp/)
+[![CI](https://img.shields.io/github/actions/workflow/status/quenazsoares/tinta-mcp/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/quenazsoares/tinta-mcp/actions/workflows/ci.yml?query=branch%3Amain)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 
 Tinta (*ink* in Portuguese) connects AI assistants to an open Inkscape session through MCP. Its structured tools create and edit SVG elements, inspect documents, and export previews using Inkscape.
 

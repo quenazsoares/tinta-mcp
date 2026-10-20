@@ -62,6 +62,8 @@ Run this on the branch you intend to release, normally `main`. The push starts t
 
 ## Test and promote
 
+CI and release checks run the full test suite on Ubuntu 26.04 with Python 3.12, 3.13, and 3.14, and on Windows with Python 3.13. Live Inkscape integration runs on Ubuntu with Python 3.13. In the release workflow, the quality and integration job also covers the Python 3.13 test suite; the platform matrix covers the remaining combinations.
+
 Wheel and sdist are built once. The workflow verifies the skill ZIP and bundled package assets, checks package metadata, and tests installation from the wheel. The verified distributions and their SHA-256 hashes are saved as a workflow artifact for 30 days.
 
 GitHub Releases attach three files: the wheel, the source distribution (`.tar.gz`), and `tinta-designer-skill.zip` for manual skill installation. The Python package includes the server, extension, and skill, so separate extension and all-in-one ZIPs are not generated. GitHub also provides source code ZIP and tar.gz links for the tagged repository.
