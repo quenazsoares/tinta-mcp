@@ -117,8 +117,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, windows-latest]
-        python-version: ["3.12", "3.13"]
+        include:
+          - os: ubuntu-26.04
+            python-version: "3.12"
+          - os: ubuntu-26.04
+            python-version: "3.13"
+          - os: ubuntu-26.04
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.13"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1

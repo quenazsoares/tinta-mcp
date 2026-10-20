@@ -83,13 +83,19 @@ jobs:
       - name: Run live Inkscape tests in isolated profiles and documents
         run: timeout 15m xvfb-run -a dbus-run-session uv run pytest tests/test_dbus_smoke.py --live-inkscape -v
 
-  windows-tests:
-    name: Windows tests and installer validation (Py ${{ matrix.python-version }})
-    runs-on: windows-latest
+  platform-tests:
+    name: Platform tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        include:
+          - os: ubuntu-26.04
+            python-version: "3.12"
+          - os: ubuntu-26.04
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.13"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -106,6 +112,7 @@ jobs:
         run: uv sync --locked --all-groups --python ${{ matrix.python-version }}
 
       - name: Validate Windows installer syntax
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           $tokens = $null
@@ -121,7 +128,7 @@ jobs:
 
   build-and-release:
     name: Build release artifacts
-    needs: [verify, windows-tests]
+    needs: [verify, platform-tests]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
